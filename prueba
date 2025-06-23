@@ -1,0 +1,63 @@
+#Instalar Airflow
+pip install --upgrade pip #dependiendo la version aveces no hace falta
+pip install "apache-airflow==2.8.1" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.8.1/constraints-3.10.txt"
+
+#Creo e ingreso a una carpeta llamada "dags"
+mkdir dags
+cd dags #para salir de la carpeta uso cd ..
+
+#Proceso ETL
+from datetime import datetime
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
+from airflow.sensors.filesystem import FileSensor
+
+# Ruta del archivo CSV original y el destino donde se copiará
+ruta_archivo = '/opt/airflow/data/inventario.csv'
+ruta_destino = '/tmp/inventario_procesado.csv'
+
+# Argumentos por defecto del DAG
+default_args = {
+    'owner': 'airflow',
+    'start_date': datetime(2025, 1, 1),
+}
+
+# Función para procesar los datos del archivo
+def procesar_datos():
+    with open(ruta_archivo, 'r') as f:
+        datos = f.readlines()
+    print(f"Líneas en inventario.csv: {len(datos)}")
+
+# Definición del DAG
+with DAG(
+    dag_id='dag_inventario_local',
+    default_args=default_args,
+    schedule_interval='@daily',
+    catchup=False
+) as dag:
+
+    # Sensor para esperar que el archivo inventario.csv esté disponible
+    tarea_esperar = FileSensor(
+        task_id='esperar_inventario',
+        filepath=ruta_archivo,
+        poke_interval=10,
+        timeout=60
+    )
+
+    # Procesamiento del archivo
+    tarea_procesar = PythonOperator(
+        task_id='procesar_inventario',
+        python_callable=procesar_datos
+    )
+
+    # Copia del archivo procesado
+    tarea_almacenar = BashOperator(
+        task_id='almacenar_inventario',
+        bash_command=f'cp {ruta_archivo} {ruta_destino}'
+    )
+
+    # Definición del orden de las tareas
+    tarea_esperar >> tarea_procesar >> tarea_almacenar
+
+#Paso 11: Creo desde la terminal el archivo "docker-compose.yml" y le adjunto el siguiente instructivo:
